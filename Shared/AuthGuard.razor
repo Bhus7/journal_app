@@ -1,0 +1,19 @@
+﻿@using JournalApp.Services
+@inject AuthState Auth
+@inject NavigationManager Nav
+
+@code {
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!Auth.IsLoggedIn)
+        {
+            var path = new Uri(Nav.Uri).AbsolutePath.ToLower();
+
+            // Allow login page without redirect loop
+            if (path != "/login")
+            {
+                Nav.NavigateTo("/login", true);
+            }
+        }
+    }
+}

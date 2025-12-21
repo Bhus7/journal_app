@@ -1,0 +1,139 @@
+﻿@page "/login"
+@using JournalApp.Data
+@using JournalApp.Data.Models
+@using JournalApp.Security
+@using JournalApp.Services
+
+
+@inject AppDbContext Db
+@inject AuthState Auth
+@inject NavigationManager Nav
+
+<div class="container-fluid d-flex align-items-center justify-content-center" style="min-height: calc(100vh - 56px);">
+    <div class="card shadow-sm" style="max-width: 520px; width: 100%; border-radius: 14px;">
+        <div class="card-body p-4 p-md-5 text-center">
+
+            <h3 class="fw-semibold mb-1">Journal App</h3>
+
+            @if (!userExists)
+            {
+                <p class="text-muted mb-4">Create a 4-digit PIN to continue</p>
+
+                <input type="password"
+                       inputmode="numeric"
+                       maxlength="4"
+                       class="form-control form-control-lg text-center mb-3"
+                       placeholder="••••"
+                       style="letter-spacing: 8px;"
+                       @bind="pin" />
+
+                <button class="btn btn-primary btn-lg w-100" @onclick="CreatePin">
+                    Create PIN
+                </button>
+            }
+            else
+            {
+                <p class="text-muted mb-4">Enter PIN to continue</p>
+
+                <input type="password"
+                       inputmode="numeric"
+                       maxlength="4"
+                       class="form-control form-control-lg text-center mb-3"
+                       placeholder="••••"
+                       style="letter-spacing: 8px;"
+                       @bind="pin" />
+
+                <button class="btn btn-primary btn-lg w-100" @onclick="LoginUser">
+                    Unlock Journal
+                </button>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(message))
+            {
+                <div class="alert alert-danger mt-3 mb-0" role="alert">
+                    @message
+                </div>
+            }
+
+            <div class="mt-4 small text-muted">
+                Data stored locally (SQLite)
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string pin = "";
+    private string message = "";
+    private bool userExists;
+
+    protected override void OnInitialized()
+    {
+        if(Auth.IsLoggedIn)
+        {
+            Nav.NavigateTo("/", true);
+            return;
+        }
+        userExists = Db.Users.Any();
+    }
+
+    private void CreatePin()
+    {
+        message = "";
+
+        if (pin.Length != 4)
+        {
+            message = "Pin must be exactly 4 digits.";
+            pin = "";
+            return;
+        }
+
+        var salt = PinHasher.CreateSalt();
+        var hash = PinHasher.CreatePinHash(pin, salt);
+
+        var user = new AppUser
+         {
+                Username = "Owner",
+                PinHash = hash,
+                Salt = salt
+         };
+
+        Db.Users.Add(user);
+        Db.SaveChanges();
+
+        Auth.Login(user.Id, user.Username);
+        Nav.NavigateTo("/");
+    }
+
+    private void LoginUser()
+    {
+        message = "";
+
+        if (pin.Length != 4)
+        {
+            message = "Pin must be exactly 4 digits";
+            return;
+        }
+
+        var user = Db.Users.FirstOrDefault();
+        if (user == null)
+        {
+            // If no user exists, show setup screen again
+            userExists = false;
+            message = "No PIN found. Please create a PIN.";
+            pin = "";
+            return;
+        }
+
+        bool isValid = PinHasher.VerifyPin(pin, user.PinHash, user.Salt);
+
+        if (!isValid)
+        {
+            message = "Incorrect PIN.";
+            pin = "";
+            return;
+        }
+        Auth.Login(user.Id, user.Username);
+        Nav.NavigateTo("/");
+    }
+}

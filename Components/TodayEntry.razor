@@ -1,0 +1,177 @@
+﻿@using JournalApp.Data
+@using JournalApp.Data.Models
+@using Microsoft.EntityFrameworkCore
+
+@page "/today"
+@inject AppDbContext Db
+
+<h3>Today's Journal Entry</h3>
+
+<div class="card p-3">
+
+    <div class="mb-3">
+        <label class="form-label">Title</label>
+        <input class="form-control"
+               @bind="Title"
+               placeholder="Enter a title..." />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Content</label>
+        <textarea class="form-control"
+                  rows="6"
+                  @bind="Content"
+                  placeholder="Write your entry..."></textarea>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Primary Mood <span class="text-danger">*</span></label>
+        <select class="form-select" @bind="PrimaryMood">
+            <option value="">--Select Primary Mood --</option>
+            @foreach (var mood in AllMoods)
+            {
+                <option value="@mood">@mood</option>
+            }
+        </select>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Secondary Mood (Optional)</label>
+        <select class="form-select" @bind="SecondaryMood1">
+            <option value="">-- Select Mood --</option>
+            @foreach (var mood in AllMoods)
+            {
+                <option value="@mood">@mood</option>
+            }
+        </select>
+    </div>
+
+    <button class="btn btn-primary w-100" @onclick="SaveEntry">
+        Save
+    </button>
+
+    @if (todayEntry != null)
+    {
+        <button class="btn btn-outline-danger w-100 mt-2" @onclick="DeleteEntry">
+            Delete
+        </button>
+    }
+
+</div>
+
+@code {
+    private string Title = "";
+    private string Content = "";
+
+    private string PrimaryMood = "";
+    private string? SecondaryMood1;
+    private string? SecondaryMood2;
+
+    private List<string> AllMoods = new()
+    {
+
+        "Happy",
+        "Excited",
+        "Relaxed",
+        "Grateful",
+        "Confident",
+        "Calm",
+        "Thoughtful",
+        "Curious",
+        "Nostalgic",
+        "Bored",
+        "Sad",
+        "Angry",
+        "Stressed",
+        "Lonely",
+        "Anxious"
+    };
+
+    private JournalEntry? todayEntry;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTodayEntryAsync();
+    }
+
+    private async Task LoadTodayEntryAsync()
+    {
+        var today = DateOnly.FromDateTime(DateTime.Now);
+
+        todayEntry = await Db.JournalEntries
+            .FirstOrDefaultAsync(e => e.EntryDate == today);
+
+        if (todayEntry != null)
+        {
+            Title = todayEntry.Title;
+            Content = todayEntry.Content;
+            PrimaryMood = todayEntry.PrimaryMood;
+            SecondaryMood1 = todayEntry.SecondaryMood1;
+            SecondaryMood2 = todayEntry.SecondaryMood2;
+        }
+        else
+        {
+            Title = "";
+            Content = "";
+            PrimaryMood = "";
+            SecondaryMood1 = null;
+            SecondaryMood2 = null;
+        }
+    }
+
+    private async Task SaveEntry()
+    {
+        if (string.IsNullOrWhiteSpace(PrimaryMood))
+        {
+            return;
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.Now);
+
+        if (todayEntry == null)
+        {
+            todayEntry = new JournalEntry
+            {
+                EntryDate = today,
+                Title = Title,
+                Content = Content,
+                PrimaryMood = PrimaryMood,
+                SecondaryMood1 = SecondaryMood1,
+                SecondaryMood2 = SecondaryMood2,
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            };
+
+            Db.JournalEntries.Add(todayEntry);
+        }
+        else
+        {
+            todayEntry.Title = Title;
+            todayEntry.Content = Content;
+            todayEntry.Title = Title;
+            todayEntry.Content = Content;
+            todayEntry.PrimaryMood = PrimaryMood;
+            todayEntry.SecondaryMood1 = SecondaryMood1;
+            todayEntry.SecondaryMood2 = SecondaryMood2;
+            todayEntry.UpdatedAt = DateTime.Now;
+        }
+
+        await Db.SaveChangesAsync();
+    }
+
+    private async Task DeleteEntry()
+    {
+        if (todayEntry != null)
+        {
+            Db.JournalEntries.Remove(todayEntry);
+            await Db.SaveChangesAsync();
+
+            todayEntry = null;
+            Title = "";
+            Content = "";
+            PrimaryMood = "";
+            SecondaryMood1 = null;
+            SecondaryMood2 = null;
+        }
+    }
+}

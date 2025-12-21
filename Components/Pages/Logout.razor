@@ -1,0 +1,15 @@
+﻿@page "/logout"
+
+@using JournalApp.Services
+@inject AuthState Auth
+@inject NavigationManager Nav
+
+<h3>Logging out...</h3>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Auth.Logout();
+        Nav.NavigateTo("/login", true);
+    }
+}
