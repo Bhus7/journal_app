@@ -1,5 +1,347 @@
 ﻿@page "/"
+@using JournalApp.Data
+@using JournalApp.Data.Models
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+@inject NavigationManager Nav
 
-<h1>Hello, world!</h1>
+<div class="dash-page">
+    <div class="dash-container">
 
-Welcome to your new app.
+        <!-- Header -->
+        <div class="dash-header">
+            <div>
+                <h2 class="dash-title">Dashboard</h2>
+                <div class="dash-subtitle">Overview of your journal activity</div>
+            </div>
+
+            <button class="btn btn-outline-secondary dash-export"
+                    disabled
+                    title="PDF export comes next">
+                Export PDF
+            </button>
+        </div>
+
+        <!-- Welcome -->
+        <div class="dash-card dash-welcome">
+            <div class="dash-welcome-title">Welcome back 👋</div>
+            <div class="dash-welcome-sub">Here’s a quick overview of your journal.</div>
+        </div>
+
+        <!-- Overview (big box) -->
+        <div class="dash-card dash-overview">
+            <div class="dash-card-head">
+                <div>
+                    <div class="dash-card-title">Overview</div>
+                    <div class="dash-card-sub">Last 30 days summary</div>
+                </div>
+            </div>
+
+            <div class="dash-grid-4">
+                <!-- Today's Entry -->
+                <div class="dash-metric metric-blue">
+                    <div class="metric-top">
+                        <div class="metric-label">Today’s Entry</div>
+                        <span class="metric-dot dot-blue"></span>
+                    </div>
+
+                    <div class="metric-value @(todayStatus == "Yes" ? "value-yes" : "value-no")">
+                        @todayStatus
+                    </div>
+
+                    <div class="metric-foot">
+                        @(todayStatus == "Yes" ? "Nice — you wrote today." : "No entry yet today.")
+                    </div>
+                </div>
+
+                <!-- Current streak -->
+                <div class="dash-metric metric-green">
+                    <div class="metric-top">
+                        <div class="metric-label">Current Streak</div>
+                        <span class="metric-dot dot-green"></span>
+                    </div>
+
+                    <div class="metric-value">@currentStreak</div>
+                    <div class="metric-foot">days</div>
+                </div>
+
+                <!-- Longest streak -->
+                <div class="dash-metric metric-orange">
+                    <div class="metric-top">
+                        <div class="metric-label">Longest Streak</div>
+                        <span class="metric-dot dot-orange"></span>
+                    </div>
+
+                    <div class="metric-value">@longestStreak</div>
+                    <div class="metric-foot">days</div>
+                </div>
+
+                <!-- Missed -->
+                <div class="dash-metric metric-red">
+                    <div class="metric-top">
+                        <div class="metric-label">Missed Days (30d)</div>
+                        <span class="metric-dot dot-red"></span>
+                    </div>
+
+                    <div class="metric-value">@missedDaysLast30</div>
+                    <div class="metric-foot">days</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts row -->
+        <div class="dash-grid-2">
+            <!-- Weekly Activity mini chart -->
+            <div class="dash-card">
+                <div class="dash-card-head">
+                    <div>
+                        <div class="dash-card-title">Weekly Activity</div>
+                        <div class="dash-card-sub">Entries in the last 7 days</div>
+                    </div>
+                </div>
+
+                @if (last7.Count == 0)
+                {
+                    <div class="dash-empty">No entries yet.</div>
+                }
+                else
+                {
+                    <div class="mini-chart">
+                        @foreach (var p in last7)
+                        {
+                            <div class="mini-col">
+                                <div class="mini-bar-wrap" title="@($"{p.DayLabel}: {p.Count}")">
+                                    <div class="mini-bar" style="height:@GetMiniBarHeight(p.Count)%"></div>
+                                </div>
+                                <div class="mini-x">@p.DayLabel</div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- Mood distribution -->
+            <div class="dash-card">
+                <div class="dash-card-head">
+                    <div>
+                        <div class="dash-card-title">Mood Distribution</div>
+                        <div class="dash-card-sub">Top moods (all time)</div>
+                    </div>
+                </div>
+
+                @if (topMoods.Count == 0)
+                {
+                    <div class="dash-empty">No mood data yet.</div>
+                }
+                else
+                {
+                    <div class="mood-list">
+                        @foreach (var m in topMoods)
+                        {
+                            <div class="mood-row">
+                                <div class="mood-left">
+                                    <div class="mood-name">@m.Key</div>
+                                    <div class="mood-count">@m.Value</div>
+                                </div>
+
+                                <div class="mood-bar">
+                                    <div class="mood-fill" style="width:@GetMoodPercent(m.Value)%"></div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Tags + CTA -->
+        <div class="dash-grid-2">
+            <div class="dash-card">
+                <div class="dash-card-head">
+                    <div>
+                        <div class="dash-card-title">Most Used Tags</div>
+                        <div class="dash-card-sub">Top 5</div>
+                    </div>
+                </div>
+
+                @if (topTags.Count == 0)
+                {
+                    <div class="dash-empty">No tags yet.</div>
+                }
+                else
+                {
+                    <div class="tag-wrap">
+                        @foreach (var tag in topTags)
+                        {
+                            <span class="tag-pill">@tag</span>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="dash-card dash-cta">
+                <div class="cta-left">
+                    <div class="cta-title">Ready to write?</div>
+                    <div class="cta-sub">Create or update today’s journal entry in one click.</div>
+                </div>
+
+                <button class="btn btn-primary cta-btn" @onclick="GoToToday">
+                    Create / Update Today’s Entry
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string todayStatus = "No";
+    private int currentStreak;
+    private int longestStreak;
+    private int missedDaysLast30;
+
+    private int maxMoodCount = 1;
+    private List<KeyValuePair<string, int>> topMoods = new();
+    private List<string> topTags = new();
+
+    private List<DayPoint> last7 = new();
+    private int maxLast7 = 1;
+
+    private sealed class DayPoint
+    {
+        public string DayLabel { get; set; } = "";
+        public int Count { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardAsync();
+    }
+
+    private async Task LoadDashboardAsync()
+    {
+        var today = DateOnly.FromDateTime(DateTime.Now);
+
+        var entries = await Db.JournalEntries
+            .Include(e => e.JournalEntryTags)
+                .ThenInclude(jt => jt.Tag)
+            .OrderBy(e => e.EntryDate)
+            .ToListAsync();
+
+        todayStatus = entries.Any(e => e.EntryDate == today) ? "Yes" : "No";
+
+        currentStreak = CalculateCurrentStreak(entries);
+        longestStreak = CalculateLongestStreak(entries);
+        missedDaysLast30 = CalculateMissedDays(entries, 30);
+
+        // Top moods (take 5)
+        var moodStats = entries
+            .Where(e => !string.IsNullOrWhiteSpace(e.PrimaryMood))
+            .GroupBy(e => e.PrimaryMood)
+            .Select(g => new KeyValuePair<string, int>(g.Key, g.Count()))
+            .OrderByDescending(x => x.Value)
+            .Take(5)
+            .ToList();
+
+        topMoods = moodStats;
+        maxMoodCount = topMoods.Count == 0 ? 1 : topMoods.Max(x => x.Value);
+
+        // Top tags (take 5)
+        topTags = entries
+            .SelectMany(e => e.JournalEntryTags)
+            .Where(jt => jt.Tag != null && !string.IsNullOrWhiteSpace(jt.Tag.Name))
+            .GroupBy(t => t.Tag.Name)
+            .OrderByDescending(g => g.Count())
+            .Take(5)
+            .Select(g => g.Key)
+            .ToList();
+
+        // Last 7 days activity
+        var end = DateOnly.FromDateTime(DateTime.Now);
+        var start = end.AddDays(-6);
+
+        var set = entries
+            .Where(e => e.EntryDate >= start && e.EntryDate <= end)
+            .GroupBy(e => e.EntryDate)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        last7 = new List<DayPoint>();
+        for (var d = start; d <= end; d = d.AddDays(1))
+        {
+            var label = d.ToDateTime(TimeOnly.MinValue).ToString("ddd"); // Mon Tue...
+            last7.Add(new DayPoint { DayLabel = label, Count = set.TryGetValue(d, out var c) ? c : 0 });
+        }
+
+        maxLast7 = Math.Max(1, last7.Max(x => x.Count));
+    }
+
+    private void GoToToday() => Nav.NavigateTo("/today");
+
+    private string GetMoodPercent(int count)
+    {
+        var pct = (int)Math.Round((count / (double)maxMoodCount) * 100);
+        return Math.Clamp(pct, 8, 100).ToString();
+    }
+
+    private string GetMiniBarHeight(int count)
+    {
+        // 0..max -> 10..100 (so bars still visible)
+        if (maxLast7 <= 0) return "10";
+        var pct = (int)Math.Round((count / (double)maxLast7) * 100);
+        return Math.Clamp(pct, 10, 100).ToString();
+    }
+
+    private int CalculateCurrentStreak(List<JournalEntry> entries)
+    {
+        var dates = entries.Select(e => e.EntryDate).Distinct().OrderByDescending(d => d).ToList();
+        var today = DateOnly.FromDateTime(DateTime.Now);
+
+        int streak = 0;
+        var check = dates.Contains(today) ? today : today.AddDays(-1);
+
+        foreach (var d in dates)
+        {
+            if (d == check)
+            {
+                streak++;
+                check = check.AddDays(-1);
+            }
+            else if (d < check)
+            {
+                break;
+            }
+        }
+        return streak;
+    }
+
+    private int CalculateLongestStreak(List<JournalEntry> entries)
+    {
+        var dates = entries.Select(e => e.EntryDate).Distinct().OrderBy(d => d).ToList();
+        int longest = 0, current = 0;
+
+        for (int i = 0; i < dates.Count; i++)
+        {
+            if (i == 0 || dates[i] == dates[i - 1].AddDays(1)) current++;
+            else current = 1;
+
+            longest = Math.Max(longest, current);
+        }
+        return longest;
+    }
+
+    private int CalculateMissedDays(List<JournalEntry> entries, int daysBack)
+    {
+        var end = DateOnly.FromDateTime(DateTime.Now);
+        var start = end.AddDays(-(daysBack - 1));
+
+        var dateSet = entries
+            .Select(e => e.EntryDate)
+            .Where(d => d >= start && d <= end)
+            .ToHashSet();
+
+        int missed = 0;
+        for (var d = start; d <= end; d = d.AddDays(1))
+            if (!dateSet.Contains(d)) missed++;
+
+        return missed;
+    }
+}
