@@ -21,6 +21,8 @@ namespace JournalApp
             builder.Services.AddMauiBlazorWebView();
             builder.Services.AddSingleton<AuthState>();
             builder.Services.AddSingleton<ThemeState>();
+            builder.Services.AddScoped<TagService>();
+
 
 
             var dbPath = Path.Combine(

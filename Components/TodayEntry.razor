@@ -1,62 +1,158 @@
 ﻿@using JournalApp.Data
 @using JournalApp.Data.Models
 @using Microsoft.EntityFrameworkCore
+@inject JournalApp.Services.TagService TagService
 
 @page "/today"
 @inject AppDbContext Db
+@inject NavigationManager Nav
 
-<h3>Today's Journal Entry</h3>
+<div class="entry-page">
+    <div class="entry-container">
 
-<div class="card p-3">
+        <!-- Header -->
+        <div class="entry-header">
+            <div>
+                <h2 class="entry-title">Today's Journal Entry</h2>
+                <div class="entry-subtitle">Write what happened today — moods + tags help you track patterns.</div>
+            </div>
 
-    <div class="mb-3">
-        <label class="form-label">Title</label>
-        <input class="form-control"
-               @bind="Title"
-               placeholder="Enter a title..." />
-    </div>
+            <div class="entry-header-actions">
+                <button type="button" class="btn btn-outline-secondary entry-btn" @onclick="GoToHistory">
+                    View History
+                </button>
+            </div>
+        </div>
 
-    <div class="mb-3">
-        <label class="form-label">Content</label>
-        <textarea class="form-control"
-                  rows="6"
-                  @bind="Content"
-                  placeholder="Write your entry..."></textarea>
-    </div>
+        <!-- Main Card -->
+        <div class="entry-card">
+            <div class="entry-card-head">
+                <div>
+                    <div class="entry-card-title">Entry Details</div>
+                    <div class="entry-card-sub">Title, content and moods</div>
+                </div>
 
-    <div class="mb-3">
-        <label class="form-label">Primary Mood <span class="text-danger">*</span></label>
-        <select class="form-select" @bind="PrimaryMood">
-            <option value="">--Select Primary Mood --</option>
-            @foreach (var mood in AllMoods)
+                @if (todayEntry != null)
+                {
+                    <span class="entry-badge">Saved today</span>
+                }
+                else
+                {
+                    <span class="entry-badge entry-badge-muted">Not saved yet</span>
+                }
+            </div>
+
+            <!-- Title -->
+            <div class="mb-3">
+                <label class="form-label entry-label">Title</label>
+                <input class="form-control entry-input"
+                       @bind="Title"
+                       placeholder="Enter a title..." />
+            </div>
+
+            <!-- Content -->
+            <div class="mb-3">
+                <label class="form-label entry-label">Content</label>
+                <textarea class="form-control entry-input"
+                          rows="7"
+                          @bind="Content"
+                          placeholder="Write your entry..."></textarea>
+            </div>
+
+            <!-- Mood Grid -->
+            <div class="row g-3">
+                <div class="col-12 col-lg-6">
+                    <label class="form-label entry-label">
+                        Primary Mood <span class="text-danger">*</span>
+                    </label>
+                    <select class="form-select entry-input" @bind="PrimaryMood">
+                        <option value="">-- Select Primary Mood --</option>
+                        @foreach (var mood in AllMoods)
+                        {
+                            <option value="@mood">@mood</option>
+                        }
+                    </select>
+                    <div class="entry-hint">Required</div>
+                </div>
+
+                <div class="col-12 col-lg-6">
+                    <label class="form-label entry-label">Secondary Mood (Optional)</label>
+                    <select class="form-select entry-input" @bind="SecondaryMood1">
+                        <option value="">-- Select Mood --</option>
+                        @foreach (var mood in AllMoods)
+                        {
+                            <option value="@mood">@mood</option>
+                        }
+                    </select>
+                    <div class="entry-hint">Optional</div>
+                </div>
+            </div>
+
+            <!-- Tags -->
+            <div class="mt-4">
+                <div class="d-flex align-items-center justify-content-between gap-3 mb-2">
+                    <div>
+                        <div class="entry-card-title">Tags</div>
+                        <div class="entry-card-sub">Click to select. Add your own tag anytime.</div>
+                    </div>
+                    <div class="entry-count">
+                        Selected: <strong>@selectedTagIds.Count</strong>
+                    </div>
+                </div>
+
+                <div class="entry-tags mb-3">
+                    @if (allTags.Count == 0)
+                    {
+                        <div class="text-muted">No tags available.</div>
+                    }
+                    else
+                    {
+                        @foreach (var tag in allTags)
+                        {
+                            var isSelected = selectedTagIds.Contains(tag.Id);
+
+                            <button type="button"
+                                    class="entry-tag @(isSelected ? "entry-tag-selected" : "")"
+                                    @onclick="() => ToggleTag(tag.Id)">
+                                @tag.Name
+                            </button>
+                        }
+                    }
+                </div>
+
+                <div class="input-group entry-input-group">
+                    <input class="form-control entry-input"
+                           placeholder="Add a custom tag (e.g., Sleep)"
+                           @bind="newTagName" />
+                    <button class="btn btn-outline-secondary entry-btn" type="button" @onclick="AddCustomTag">
+                        Add
+                    </button>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="entry-actions mt-4">
+                <button class="btn btn-primary entry-save" @onclick="SaveEntry" disabled="@IsSaveDisabled()">
+                    Save Entry
+                </button>
+
+                @if (todayEntry != null)
+                {
+                    <button class="btn btn-outline-danger entry-delete" @onclick="DeleteEntry">
+                        Delete
+                    </button>
+                }
+            </div>
+
+            @if (IsSaveDisabled())
             {
-                <option value="@mood">@mood</option>
+                <div class="entry-warning mt-3">
+                    Select a <strong>Primary Mood</strong> to enable saving.
+                </div>
             }
-        </select>
+        </div>
+
     </div>
-
-    <div class="mb-3">
-        <label class="form-label">Secondary Mood (Optional)</label>
-        <select class="form-select" @bind="SecondaryMood1">
-            <option value="">-- Select Mood --</option>
-            @foreach (var mood in AllMoods)
-            {
-                <option value="@mood">@mood</option>
-            }
-        </select>
-    </div>
-
-    <button class="btn btn-primary w-100" @onclick="SaveEntry">
-        Save
-    </button>
-
-    @if (todayEntry != null)
-    {
-        <button class="btn btn-outline-danger w-100 mt-2" @onclick="DeleteEntry">
-            Delete
-        </button>
-    }
-
 </div>
 
 @code {
@@ -67,24 +163,16 @@
     private string? SecondaryMood1;
     private string? SecondaryMood2;
 
+    // Tags
+    private List<Tag> allTags = new();
+    private HashSet<int> selectedTagIds = new();
+    private string newTagName = "";
+
     private List<string> AllMoods = new()
     {
-
-        "Happy",
-        "Excited",
-        "Relaxed",
-        "Grateful",
-        "Confident",
-        "Calm",
-        "Thoughtful",
-        "Curious",
-        "Nostalgic",
-        "Bored",
-        "Sad",
-        "Angry",
-        "Stressed",
-        "Lonely",
-        "Anxious"
+        "Happy", "Excited", "Relaxed", "Grateful", "Confident", "Calm",
+        "Thoughtful", "Curious", "Nostalgic", "Bored", "Sad", "Angry",
+        "Stressed", "Lonely", "Anxious"
     };
 
     private JournalEntry? todayEntry;
@@ -92,6 +180,21 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadTodayEntryAsync();
+        await LoadTagsAsync();
+    }
+
+    private async Task LoadTagsAsync()
+    {
+        allTags = await TagService.GetAllTagsAsync();
+
+        if (todayEntry != null)
+        {
+            selectedTagIds = (await TagService.GetTagIdsForEntryAsync(todayEntry.Id)).ToHashSet();
+        }
+        else
+        {
+            selectedTagIds = new HashSet<int>();
+        }
     }
 
     private async Task LoadTodayEntryAsync()
@@ -119,12 +222,28 @@
         }
     }
 
+    private void ToggleTag(int tagId)
+    {
+        if (!selectedTagIds.Add(tagId))
+            selectedTagIds.Remove(tagId);
+    }
+
+    private async Task AddCustomTag()
+    {
+        if (string.IsNullOrWhiteSpace(newTagName))
+            return;
+
+        var tag = await TagService.GetOrCreateTagAsync(newTagName);
+        newTagName = "";
+
+        allTags = await TagService.GetAllTagsAsync();
+        selectedTagIds.Add(tag.Id);
+    }
+
     private async Task SaveEntry()
     {
         if (string.IsNullOrWhiteSpace(PrimaryMood))
-        {
             return;
-        }
 
         var today = DateOnly.FromDateTime(DateTime.Now);
 
@@ -148,8 +267,6 @@
         {
             todayEntry.Title = Title;
             todayEntry.Content = Content;
-            todayEntry.Title = Title;
-            todayEntry.Content = Content;
             todayEntry.PrimaryMood = PrimaryMood;
             todayEntry.SecondaryMood1 = SecondaryMood1;
             todayEntry.SecondaryMood2 = SecondaryMood2;
@@ -157,12 +274,15 @@
         }
 
         await Db.SaveChangesAsync();
+        await TagService.SetTagsForEntryAsync(todayEntry!.Id, selectedTagIds);
     }
 
     private async Task DeleteEntry()
     {
         if (todayEntry != null)
         {
+            await TagService.SetTagsForEntryAsync(todayEntry.Id, Array.Empty<int>());
+
             Db.JournalEntries.Remove(todayEntry);
             await Db.SaveChangesAsync();
 
@@ -172,6 +292,12 @@
             PrimaryMood = "";
             SecondaryMood1 = null;
             SecondaryMood2 = null;
+
+            selectedTagIds = new HashSet<int>();
         }
     }
+
+    private bool IsSaveDisabled() => string.IsNullOrWhiteSpace(PrimaryMood);
+
+    private void GoToHistory() => Nav.NavigateTo("/history");
 }

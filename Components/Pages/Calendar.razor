@@ -1,0 +1,154 @@
+﻿@page "/calendar"
+@using JournalApp.Data
+@using JournalApp.Data.Models
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+@inject NavigationManager Nav
+
+<div class="cal-page">
+    <div class="cal-shell">
+
+        <div class="cal-top">
+            <div>
+                <h2 class="cal-title">Calendar</h2>
+                <div class="cal-sub">See your journal entries by date.</div>
+            </div>
+
+            <div class="cal-nav">
+                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="PrevMonth">‹</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="NextMonth">›</button>
+            </div>
+        </div>
+
+        <div class="cal-month">@monthCursor.ToString("MMMM yyyy").ToUpper()</div>
+
+        <div class="cal-weekdays">
+            @foreach (var name in weekNames)
+            {
+                <div class="cal-weekday">@name</div>
+            }
+        </div>
+
+        <div class="cal-grid">
+            @foreach (var cell in calendarCells)
+            {
+                <button type="button"
+                        class="cal-cell @(cell.IsCurrentMonth ? "" : "cal-out")
+                                           @(cell.HasEntry ? "cal-entry" : "")
+                                           @(cell.IsToday ? "cal-today" : "")"
+                        disabled="@(cell.Date == null)"
+                        title="@(cell.Date.HasValue? cell.Date.Value.ToString("dd MMM yyyy") : "")"
+                        @onclick="() => OnDayClick(cell.Date)">
+                    @if (cell.Date.HasValue)
+                    {
+                        <span class="cal-day">@cell.Date.Value.Day</span>
+
+                        @* dot indicates journal exists *@
+                        @if (cell.HasEntry)
+                        {
+                            <span class="cal-dot"></span>
+                        }
+                    }
+                </button>
+            }
+        </div>
+
+        <div class="cal-legend-row">
+            <div class="cal-legend">
+                <span class="cal-dot-legend"></span>
+                <span>Entry day</span>
+            </div>
+
+            <div class="cal-legend">
+                <span class="cal-today-legend"></span>
+                <span>Today</span>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@code {
+    private DateTime monthCursor = new(DateTime.Now.Year, DateTime.Now.Month, 1);
+
+    private readonly string[] weekNames = new[] { "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
+
+    private HashSet<DateOnly> entryDaysInMonth = new();
+    private List<CalCell> calendarCells = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadMonthAsync();
+    }
+
+    private async Task LoadMonthAsync()
+    {
+        var monthStart = new DateOnly(monthCursor.Year, monthCursor.Month, 1);
+        var monthEnd = monthStart.AddMonths(1).AddDays(-1);
+
+        entryDaysInMonth = (await Db.JournalEntries
+            .Where(e => e.EntryDate >= monthStart && e.EntryDate <= monthEnd)
+            .Select(e => e.EntryDate)
+            .Distinct()
+            .ToListAsync()).ToHashSet();
+
+        BuildCalendarGrid();
+    }
+
+    private void BuildCalendarGrid()
+    {
+        calendarCells = new List<CalCell>();
+
+        var first = new DateTime(monthCursor.Year, monthCursor.Month, 1);
+
+        // Sunday = 0. We want a clean 6-week calendar grid like real apps.
+        int leading = (int)first.DayOfWeek;
+        var gridStart = first.AddDays(-leading);
+
+        for (int i = 0; i < 42; i++)
+        {
+            var d = gridStart.AddDays(i);
+            var dateOnly = DateOnly.FromDateTime(d);
+
+            bool isCurrent = (d.Month == monthCursor.Month && d.Year == monthCursor.Year);
+            bool hasEntry = entryDaysInMonth.Contains(dateOnly);
+            bool isToday = dateOnly == DateOnly.FromDateTime(DateTime.Now);
+
+            calendarCells.Add(new CalCell
+            {
+                Date = dateOnly,
+                IsCurrentMonth = isCurrent,
+                HasEntry = hasEntry,
+                IsToday = isToday
+            });
+        }
+    }
+
+    private async Task PrevMonth()
+    {
+        monthCursor = monthCursor.AddMonths(-1);
+        await LoadMonthAsync();
+    }
+
+    private async Task NextMonth()
+    {
+        monthCursor = monthCursor.AddMonths(1);
+        await LoadMonthAsync();
+    }
+
+    private void OnDayClick(DateOnly? d)
+    {
+        if (d is null) return;
+
+        // If you want: clicking any day goes to History filtered by date
+        Nav.NavigateTo($"/history?date={d.Value:yyyy-MM-dd}");
+    }
+
+    private class CalCell
+    {
+        public DateOnly? Date { get; set; }
+        public bool IsCurrentMonth { get; set; }
+        public bool HasEntry { get; set; }
+        public bool IsToday { get; set; }
+    }
+}
