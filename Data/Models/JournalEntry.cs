@@ -23,5 +23,8 @@ namespace JournalApp.Data.Models
         public String? SecondaryMood2 { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+
+        public ICollection<JournalEntryTag> JournalEntryTags { get; set; } = new List<JournalEntryTag>();
+
     }
 }
