@@ -1,0 +1,73 @@
+@using Microsoft.JSInterop
+@implements IDisposable
+@inject IJSRuntime JS
+
+<div class="quill-host entry-input" @ref="editorHost"></div>
+
+@code {
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    [Parameter] public string Placeholder { get; set; } = "Write...";
+    [Parameter] public bool ReadOnly { get; set; } = false;
+
+    private ElementReference editorHost;
+    private DotNetObjectReference<RichTextEditor>? objRef;
+
+    private bool quillCreated = false;
+    private string lastLoadedValue = "";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            objRef = DotNetObjectReference.Create(this);
+
+            await JS.InvokeVoidAsync(
+                "QuillFunctions.createQuill",
+                editorHost,
+                null,          // keep null: no toolbar (no design/layout change)
+                ReadOnly,
+                Placeholder,
+                "snow",
+                "warn",
+                objRef
+            );
+
+            quillCreated = true;
+
+            lastLoadedValue = Value ?? "";
+            await JS.InvokeVoidAsync("QuillFunctions.setQuillHtml", editorHost, lastLoadedValue);
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!quillCreated) return;
+
+        var incoming = Value ?? "";
+        if (incoming != lastLoadedValue)
+        {
+            lastLoadedValue = incoming;
+            await JS.InvokeVoidAsync("QuillFunctions.setQuillHtml", editorHost, incoming);
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnContentChanged(string html)
+    {
+        html ??= "";
+
+        if ((Value ?? "") != html)
+        {
+            Value = html;
+            lastLoadedValue = html;
+            await ValueChanged.InvokeAsync(html);
+        }
+    }
+
+    public void Dispose()
+    {
+        objRef?.Dispose();
+    }
+}

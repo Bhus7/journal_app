@@ -1,11 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using JournalApp.Data.Models;
-
 
 namespace JournalApp.Data
 {
@@ -14,7 +8,7 @@ namespace JournalApp.Data
         public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
         public DbSet<AppUser> Users => Set<AppUser>();
 
-        // NEW (Tags)
+        // Tags
         public DbSet<Tag> Tags => Set<Tag>();
         public DbSet<JournalEntryTag> JournalEntryTags => Set<JournalEntryTag>();
 
@@ -27,10 +21,9 @@ namespace JournalApp.Data
         {
             base.OnModelCreating(modelBuilder);
 
-            // One journal entry per day
+            // Dictionary<string, object>
             modelBuilder.Entity<JournalEntry>()
-                .HasIndex(e => e.EntryDate)
-                .IsUnique();
+                .HasIndex(e => e.EntryDate); // Not unique anymore to allow multiple entries per day
 
             modelBuilder.Entity<JournalEntry>()
                 .Property(e => e.PrimaryMood)
@@ -63,7 +56,7 @@ namespace JournalApp.Data
                 .WithMany(t => t.JournalEntryTags)
                 .HasForeignKey(jt => jt.TagId);
 
-            // Pre-built tags (edit as you like)
+            // Pre-built tags
             modelBuilder.Entity<Tag>().HasData(
                 new Tag { Id = 1, Name = "Work" },
                 new Tag { Id = 2, Name = "Study" },

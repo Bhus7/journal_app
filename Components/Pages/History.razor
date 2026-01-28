@@ -4,6 +4,7 @@
 @using Microsoft.EntityFrameworkCore
 @inject AppDbContext Db
 @inject JournalApp.Services.TagService TagService
+@inject JournalApp.Services.PdfExportService PdfExportService
 
 <h3>Journal History</h3>
 
@@ -33,6 +34,25 @@
             <button class="btn btn-outline-secondary" @onclick="ClearFilters">
                 Clear
             </button>
+        </div>
+    </div>
+
+    <!-- Date range filter -->
+    <div class="row g-2 mt-3">
+        <div class="col-12 col-md-6">
+            <label class="form-label">Start Date</label>
+            <input type="date"
+                   class="form-control"
+                   value="@StartDateValue"
+                   @onchange="OnStartDateChanged" />
+        </div>
+
+        <div class="col-12 col-md-6">
+            <label class="form-label">End Date</label>
+            <input type="date"
+                   class="form-control"
+                   value="@EndDateValue"
+                   @onchange="OnEndDateChanged" />
         </div>
     </div>
 
@@ -75,7 +95,6 @@ else
     <div class="list-group mb-3">
         @foreach (var entry in entries)
         {
-            <!-- CLICKABLE CARD -->
             <a class="list-group-item list-group-item-action"
                href="/entry/@entry.Id"
                style="cursor:pointer; text-decoration:none; color:inherit;">
@@ -101,7 +120,7 @@ else
         }
     </div>
 
-    <div class="d-flex justify-content-between align-items-center">
+    <div class="d-flex justify-content-between align-items-center mb-3">
         <button class="btn btn-outline-primary"
                 disabled="@(currentPageNumber == 1)"
                 @onclick="PrevPage">
@@ -116,6 +135,12 @@ else
             Next
         </button>
     </div>
+
+    <div class="d-flex justify-content-end">
+        <button class="btn btn-outline-success" @onclick="ExportAllHistory">
+            Export All
+        </button>
+    </div>
 }
 
 @code {
@@ -128,6 +153,10 @@ else
     // Filters
     private string searchText = "";
     private string selectedMood = "";
+
+    // Date range filters
+    private DateOnly? StartDate;
+    private DateOnly? EndDate;
 
     // Tag filter
     private List<Tag> allTags = new();
@@ -145,9 +174,34 @@ else
         await LoadEntriesAsync();
     }
 
+    // These two properties help show the date in the input (or blank if null)
+    private string StartDateValue => StartDate?.ToString("yyyy-MM-dd") ?? "";
+    private string EndDateValue => EndDate?.ToString("yyyy-MM-dd") ?? "";
+
+    private async Task OnStartDateChanged(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var d))
+            StartDate = d;
+        else
+            StartDate = null;
+
+        await RefreshFromFilters();
+    }
+
+    private async Task OnEndDateChanged(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var d))
+            EndDate = d;
+        else
+            EndDate = null;
+
+        await RefreshFromFilters();
+    }
+
     private async Task LoadEntriesAsync()
     {
         var query = Db.JournalEntries
+            .AsNoTracking()
             .Include(e => e.JournalEntryTags)
                 .ThenInclude(jt => jt.Tag)
             .AsQueryable();
@@ -165,13 +219,26 @@ else
                 (e.Content != null && EF.Functions.Like(e.Content, $"%{s}%")));
         }
 
+        if (StartDate != null)
+        {
+            query = query.Where(e => e.EntryDate >= StartDate.Value);
+        }
+
+        if (EndDate != null)
+        {
+            query = query.Where(e => e.EntryDate <= EndDate.Value);
+        }
+
         if (selectedTagIds.Count > 0)
         {
             query = query.Where(e =>
                 e.JournalEntryTags.Any(jt => selectedTagIds.Contains(jt.TagId)));
         }
 
-        query = query.OrderByDescending(e => e.EntryDate);
+        // newest saved/edited first
+        query = query
+            .OrderByDescending(e => e.UpdatedAt)
+            .ThenByDescending(e => e.EntryDate);
 
         var totalCount = await query.CountAsync();
 
@@ -181,6 +248,22 @@ else
             .ToListAsync();
 
         hasMore = totalCount > currentPageNumber * PageSize;
+    }
+
+    private async Task ExportAllHistory()
+    {
+        var all = await Db.JournalEntries
+            .AsNoTracking()
+            .Include(e => e.JournalEntryTags)
+                .ThenInclude(jt => jt.Tag)
+            .ToListAsync();
+
+        var path = PdfExportService.ExportAllEntriesToPdf(all);
+
+        await Launcher.OpenAsync(new OpenFileRequest
+        {
+            File = new ReadOnlyFile(path)
+        });
     }
 
     private async Task NextPage()
@@ -210,6 +293,8 @@ else
     {
         searchText = "";
         selectedMood = "";
+        StartDate = null;
+        EndDate = null;
         selectedTagIds.Clear();
         currentPageNumber = 1;
         await LoadEntriesAsync();

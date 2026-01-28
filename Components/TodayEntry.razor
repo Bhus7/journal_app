@@ -34,12 +34,21 @@
 
                 @if (todayEntry != null)
                 {
-                    <span class="entry-badge">Saved today</span>
+                    <span class="entry-badge">Saved for @SelectedDate.ToString("dd MMM yyyy")</span>
                 }
                 else
                 {
-                    <span class="entry-badge entry-badge-muted">Not saved yet</span>
+                    <span class="entry-badge entry-badge-muted">New Entry for @SelectedDate.ToString("dd MMM yyyy")</span>
                 }
+            </div>
+
+            <!-- Date picker -->
+            <div class="mb-3">
+                <label class="form-label entry-label">Entry date</label>
+                <input type="date" class="form-control entry-input"
+                       value="@SelectedDate.ToString("yyyy-MM-dd")"
+                       @onchange="OnDateChanged" />
+                <div class="entry-hint">Pick a date to add an entry.</div>
             </div>
 
             <!-- Title -->
@@ -53,10 +62,7 @@
             <!-- Content -->
             <div class="mb-3">
                 <label class="form-label entry-label">Content</label>
-                <textarea class="form-control entry-input"
-                          rows="7"
-                          @bind="Content"
-                          placeholder="Write your entry..."></textarea>
+                <RichTextEditor @bind-Value="Content" Placeholder="Write your entry..." />
             </div>
 
             <!-- Mood Grid -->
@@ -163,7 +169,8 @@
     private string? SecondaryMood1;
     private string? SecondaryMood2;
 
-    // Tags
+    private DateOnly SelectedDate = DateOnly.FromDateTime(DateTime.Now);
+
     private List<Tag> allTags = new();
     private HashSet<int> selectedTagIds = new();
     private string newTagName = "";
@@ -179,8 +186,19 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadTodayEntryAsync();
+        await LoadEntryForSelectedDateAsync();
         await LoadTagsAsync();
+    }
+
+    private async Task OnDateChanged(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var d))
+        {
+            SelectedDate = d;
+            await LoadEntryForSelectedDateAsync();
+            await LoadTagsAsync();
+            StateHasChanged();
+        }
     }
 
     private async Task LoadTagsAsync()
@@ -197,29 +215,23 @@
         }
     }
 
-    private async Task LoadTodayEntryAsync()
+    private Task LoadEntryForSelectedDateAsync()
     {
-        var today = DateOnly.FromDateTime(DateTime.Now);
+        // Don't load existing. Always start fresh for a new entry.
+        ClearFormOnly();
+        return Task.CompletedTask;
+    }
 
-        todayEntry = await Db.JournalEntries
-            .FirstOrDefaultAsync(e => e.EntryDate == today);
-
-        if (todayEntry != null)
-        {
-            Title = todayEntry.Title;
-            Content = todayEntry.Content;
-            PrimaryMood = todayEntry.PrimaryMood;
-            SecondaryMood1 = todayEntry.SecondaryMood1;
-            SecondaryMood2 = todayEntry.SecondaryMood2;
-        }
-        else
-        {
-            Title = "";
-            Content = "";
-            PrimaryMood = "";
-            SecondaryMood1 = null;
-            SecondaryMood2 = null;
-        }
+    // This clears fields but keeps SelectedDate same
+    private void ClearFormOnly()
+    {
+        Title = "";
+        Content = "";
+        PrimaryMood = "";
+        SecondaryMood1 = null;
+        SecondaryMood2 = null;
+        selectedTagIds = new HashSet<int>();
+        todayEntry = null;
     }
 
     private void ToggleTag(int tagId)
@@ -245,13 +257,13 @@
         if (string.IsNullOrWhiteSpace(PrimaryMood))
             return;
 
-        var today = DateOnly.FromDateTime(DateTime.Now);
+        var day = SelectedDate;
 
         if (todayEntry == null)
         {
             todayEntry = new JournalEntry
             {
-                EntryDate = today,
+                EntryDate = day,
                 Title = Title,
                 Content = Content,
                 PrimaryMood = PrimaryMood,
@@ -275,6 +287,9 @@
 
         await Db.SaveChangesAsync();
         await TagService.SetTagsForEntryAsync(todayEntry!.Id, selectedTagIds);
+
+        // THIS IS THE IMPORTANT PART: after save, clear details
+        ClearFormOnly();
     }
 
     private async Task DeleteEntry()
@@ -286,14 +301,7 @@
             Db.JournalEntries.Remove(todayEntry);
             await Db.SaveChangesAsync();
 
-            todayEntry = null;
-            Title = "";
-            Content = "";
-            PrimaryMood = "";
-            SecondaryMood1 = null;
-            SecondaryMood2 = null;
-
-            selectedTagIds = new HashSet<int>();
+            ClearFormOnly();
         }
     }
 
