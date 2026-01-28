@@ -2,8 +2,11 @@
 @using JournalApp.Data
 @using JournalApp.Data.Models
 @using Microsoft.EntityFrameworkCore
+
 @inject AppDbContext Db
 @inject NavigationManager Nav
+@inject JournalApp.Services.TagService TagService
+@inject JournalApp.Services.PdfExportService PdfExportService
 
 <h3>Journal Entry</h3>
 
@@ -15,54 +18,192 @@ else
 {
     <div class="card p-4">
 
+        <!-- Shows date and mood badge -->
         <div class="d-flex justify-content-between align-items-center mb-2">
             <h5 class="mb-0">@entry.EntryDate.ToString("dddd, dd MMMM yyyy")</h5>
-            <span class="badge bg-primary fs-6">@entry.PrimaryMood</span>
+            <span class="badge bg-primary fs-6">
+                @(isEditing? PrimaryMood : entry.PrimaryMood)
+            </span>
         </div>
 
-        <h4 class="mt-3">@entry.Title</h4>
-
-        <p class="mt-3" style="white-space: pre-wrap;">@entry.Content</p>
-
-        @if (!string.IsNullOrWhiteSpace(entry.SecondaryMood1))
+        <!-- When not editing, show normal text -->
+        @if (!isEditing)
         {
-            <p><strong>Secondary mood:</strong> @entry.SecondaryMood1</p>
+            <h4 class="mt-3">@entry.Title</h4>
+
+            <p class="mt-3" style="white-space: pre-wrap;">
+                @entry.Content
+            </p>
+
+            @if (!string.IsNullOrWhiteSpace(entry.SecondaryMood1))
+            {
+                <p><strong>Secondary mood:</strong> @entry.SecondaryMood1</p>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(entry.SecondaryMood2))
+            {
+                <p><strong>Secondary mood 2:</strong> @entry.SecondaryMood2</p>
+            }
+
+            @if (entry.JournalEntryTags?.Count > 0)
+            {
+                <div class="mt-3">
+                    <strong>Tags:</strong>
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        @foreach (var jt in entry.JournalEntryTags)
+                        {
+                            <span class="badge bg-secondary">@jt.Tag.Name</span>
+                        }
+                    </div>
+                </div>
+            }
         }
-
-        @if (!string.IsNullOrWhiteSpace(entry.SecondaryMood2))
+        else
         {
-            <p><strong>Secondary mood 2:</strong> @entry.SecondaryMood2</p>
-        }
-
-        @if (entry.JournalEntryTags?.Count > 0)
-        {
+            <!-- When editing, show inputs -->
             <div class="mt-3">
-                <strong>Tags:</strong>
-                <div class="d-flex flex-wrap gap-2 mt-2">
-                    @foreach (var jt in entry.JournalEntryTags)
-                    {
-                        <span class="badge bg-secondary">@jt.Tag.Name</span>
-                    }
+                <label class="form-label">Title</label>
+                <input class="form-control" @bind="Title" />
+            </div>
+
+            <div class="mt-3">
+                <label class="form-label">Content</label>
+                <textarea class="form-control" rows="7" style="white-space: pre-wrap;" @bind="Content"></textarea>
+            </div>
+
+            <div class="row g-3 mt-1">
+                <div class="col-12 col-lg-6">
+                    <label class="form-label">
+                        Primary Mood <span class="text-danger">*</span>
+                    </label>
+                    <select class="form-select" @bind="PrimaryMood">
+                        <option value="">-- Select Primary Mood --</option>
+                        @foreach (var mood in AllMoods)
+                        {
+                            <option value="@mood">@mood</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="col-12 col-lg-6">
+                    <label class="form-label">Secondary Mood (Optional)</label>
+                    <select class="form-select" @bind="SecondaryMood1">
+                        <option value="">-- Select Mood --</option>
+                        @foreach (var mood in AllMoods)
+                        {
+                            <option value="@mood">@mood</option>
+                        }
+                    </select>
                 </div>
             </div>
+
+            <div class="mt-3">
+                <label class="form-label">Secondary Mood 2 (Optional)</label>
+                <select class="form-select" @bind="SecondaryMood2">
+                    <option value="">-- Select Mood --</option>
+                    @foreach (var mood in AllMoods)
+                    {
+                        <option value="@mood">@mood</option>
+                    }
+                </select>
+            </div>
+
+            <!-- Tags selection -->
+            <div class="mt-3">
+                <strong>Tags:</strong>
+
+                @if (allTags.Count == 0)
+                {
+                    <div class="text-muted mt-2">No tags available.</div>
+                }
+                else
+                {
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        @foreach (var tag in allTags)
+                        {
+                            var selected = selectedTagIds.Contains(tag.Id);
+
+                            <button type="button"
+                                    class="btn btn-sm @(selected ? "btn-primary" : "btn-outline-primary")"
+                                    @onclick="() => ToggleTag(tag.Id)">
+                                @tag.Name
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+
+            @if (string.IsNullOrWhiteSpace(PrimaryMood))
+            {
+                <div class="text-danger mt-3">
+                    Primary Mood is required to save.
+                </div>
+            }
         }
 
+        <!-- Buttons -->
         <div class="mt-4 d-flex justify-content-between">
             <button class="btn btn-outline-secondary" @onclick="GoBack">
                 ← Back
             </button>
 
-            <button class="btn btn-outline-danger" @onclick="DeleteEntry">
-                Delete
-            </button>
+            <div class="d-flex gap-2">
+                @if (!isEditing)
+                {
+                    <!-- Export PDF is visible here in VIEW MODE -->
+                    <button class="btn btn-outline-success" @onclick="ExportPdf">
+                        Export PDF
+                    </button>
+
+                    <button class="btn btn-outline-primary" @onclick="StartEdit">
+                        Edit
+                    </button>
+
+                    <button class="btn btn-outline-danger" @onclick="DeleteEntry">
+                        Delete
+                    </button>
+                }
+                else
+                {
+                    <button class="btn btn-success" @onclick="SaveChanges"
+                            disabled="@string.IsNullOrWhiteSpace(PrimaryMood)">
+                        Save
+                    </button>
+
+                    <button class="btn btn-outline-secondary" @onclick="CancelEdit">
+                        Cancel
+                    </button>
+                }
+            </div>
         </div>
+
     </div>
 }
 
 @code {
+
     [Parameter] public int Id { get; set; }
 
     private JournalEntry? entry;
+    private bool isEditing = false;
+
+    // Edit fields
+    private string Title = "";
+    private string Content = "";
+    private string PrimaryMood = "";
+    private string? SecondaryMood1;
+    private string? SecondaryMood2;
+
+    // Tags
+    private List<Tag> allTags = new();
+    private HashSet<int> selectedTagIds = new();
+
+    private readonly List<string> AllMoods = new()
+    {
+        "Happy","Excited","Relaxed","Grateful","Confident","Calm",
+        "Thoughtful","Curious","Nostalgic","Bored","Sad","Angry",
+        "Stressed","Lonely","Anxious"
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -70,6 +211,66 @@ else
             .Include(e => e.JournalEntryTags)
                 .ThenInclude(jt => jt.Tag)
             .FirstOrDefaultAsync(e => e.Id == Id);
+
+        allTags = await TagService.GetAllTagsAsync();
+
+        if (entry != null)
+        {
+            selectedTagIds = (await TagService.GetTagIdsForEntryAsync(entry.Id)).ToHashSet();
+        }
+    }
+
+    private void StartEdit()
+    {
+        if (entry == null) return;
+
+        Title = entry.Title;
+        Content = entry.Content;
+        PrimaryMood = entry.PrimaryMood;
+        SecondaryMood1 = entry.SecondaryMood1;
+        SecondaryMood2 = entry.SecondaryMood2;
+
+        isEditing = true;
+    }
+
+    private async Task SaveChanges()
+    {
+        if (entry == null || string.IsNullOrWhiteSpace(PrimaryMood))
+            return;
+
+        entry.Title = Title;
+        entry.Content = Content;
+        entry.PrimaryMood = PrimaryMood;
+        entry.SecondaryMood1 = SecondaryMood1;
+        entry.SecondaryMood2 = SecondaryMood2;
+        entry.UpdatedAt = DateTime.Now;
+
+        await Db.SaveChangesAsync();
+        await TagService.SetTagsForEntryAsync(entry.Id, selectedTagIds);
+
+        isEditing = false;
+
+        // Reload fresh data to show updated info
+        entry = await Db.JournalEntries
+            .Include(e => e.JournalEntryTags)
+                .ThenInclude(jt => jt.Tag)
+            .FirstOrDefaultAsync(e => e.Id == Id);
+    }
+
+    private void CancelEdit()
+    {
+        isEditing = false;
+    }
+
+    private async Task DeleteEntry()
+    {
+        if (entry != null)
+        {
+            await TagService.SetTagsForEntryAsync(entry.Id, Array.Empty<int>());
+            Db.JournalEntries.Remove(entry);
+            await Db.SaveChangesAsync();
+            Nav.NavigateTo("/history", true);
+        }
     }
 
     private void GoBack()
@@ -77,13 +278,22 @@ else
         Nav.NavigateTo("/history");
     }
 
-    private async Task DeleteEntry()
+    private void ToggleTag(int tagId)
     {
-        if (entry != null)
+        if (!selectedTagIds.Add(tagId))
+            selectedTagIds.Remove(tagId);
+    }
+
+    private async Task ExportPdf()
+    {
+        if (entry == null)
+            return;
+
+        var path = PdfExportService.ExportEntryToPdf(entry);
+
+        await Launcher.OpenAsync(new OpenFileRequest
         {
-            Db.JournalEntries.Remove(entry);
-            await Db.SaveChangesAsync();
-            Nav.NavigateTo("/history", true);
-        }
+            File = new ReadOnlyFile(path)
+        });
     }
 }

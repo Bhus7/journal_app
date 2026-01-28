@@ -11,6 +11,8 @@ namespace JournalApp
         {
             var builder = MauiApp.CreateBuilder();
 
+            QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+
             builder
                 .UseMauiApp<App>()
                 .ConfigureFonts(fonts =>
@@ -22,12 +24,14 @@ namespace JournalApp
             builder.Services.AddSingleton<AuthState>();
             builder.Services.AddSingleton<ThemeState>();
             builder.Services.AddScoped<TagService>();
+            builder.Services.AddSingleton<JournalApp.Services.PdfExportService>();
+
 
 
 
             var dbPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "journal.db");
+                "journal_v2.db");
 
             builder.Services.AddDbContext<AppDbContext>(options =>
                 options.UseSqlite($"Filename={dbPath}"));

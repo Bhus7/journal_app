@@ -916,3 +916,26 @@ main,
         margin-top: 12px;
     }
 }
+
+/* Our host uses your existing .entry-input styling */
+.quill-host {
+    padding: 0; /* prevents double padding */
+}
+
+    /* Remove Quill's default borders so it doesn't fight your entry-input border */
+    .quill-host .ql-container {
+        border: none;
+    }
+
+    /* Visible editing area */
+    .quill-host .ql-editor {
+        min-height: 160px; /* make it look like a proper textarea, same layout */
+        padding: 0.75rem; /* matches Bootstrap-like input padding */
+    }
+
+    /* Optional: keep consistent font */
+    .quill-host .ql-editor,
+    .quill-host .ql-container {
+        font-family: inherit;
+        font-size: 1rem;
+    }
